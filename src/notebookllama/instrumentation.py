@@ -152,22 +152,28 @@ class OtelTracesSqlEngine:
             output_path: Path to save parquet file/directory
             compression: Compression algorithm (default: snappy)
             partition_cols: Columns to partition by (e.g., ['service_name', 'date'])
-
-        Examples:
-            >>> # Simple export
-            >>> engine.to_parquet("traces.parquet")
-
-            >>> # Partitioned by service
-            >>> engine.to_parquet("traces/", partition_cols=["service_name"])
-
-            >>> # With gzip compression
-            >>> engine.to_parquet("traces.parquet", compression="gzip")
         """
         df = self.to_pandas()
 
-        # Add date column for partitioning if needed
-        if partition_cols and "date" in partition_cols:
-            df["date"] = pd.to_datetime(df["start_time"], unit="us").dt.date
+        # Ensure start_time is datetime for better downstream usability
+        if "start_time" in df.columns:
+            df["start_time"] = pd.to_datetime(df["start_time"], unit="us")
+
+        # Handle partition columns
+        if partition_cols:
+            # Derive date column only if explicitly requested
+            if "date" in partition_cols:
+                if "start_time" not in df.columns:
+                    raise ValueError("Cannot derive 'date' column without 'start_time'")
+                df["date"] = df["start_time"].dt.date
+
+            # Validate partition columns
+            missing_cols = [col for col in partition_cols if col not in df.columns]
+            if missing_cols:
+                raise ValueError(
+                    f"Invalid partition columns: {missing_cols}. "
+                    f"Available columns: {list(df.columns)}"
+                )
 
         df.to_parquet(
             output_path,
