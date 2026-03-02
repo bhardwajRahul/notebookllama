@@ -309,6 +309,46 @@ if file_input is not None:
 
                 except Exception as e:
                     st.error(f"Error generating podcast: {str(e)}")
+        st.markdown("---")
+        st.markdown("## Export Traces")
+
+        with st.expander("Export Traces to Parquet"):
+            export_path = st.text_input(
+                "Output Path",
+                value="traces.parquet",
+                help="Path to save the Parquet file or directory",
+            )
+
+            compression = st.selectbox(
+                "Compression",
+                ["snappy", "gzip", "brotli", "lz4", "zstd"],
+                index=0,
+            )
+
+            partition_cols_input = st.text_input(
+                "Partition Columns (comma separated)",
+                value="service_name,date",
+                help="Example: service_name,date",
+            )
+
+            if st.button("Export Parquet"):
+                try:
+                    partition_cols = (
+                        [col.strip() for col in partition_cols_input.split(",")]
+                        if partition_cols_input.strip()
+                        else None
+                    )
+
+                    sql_engine.to_parquet(
+                        output_path=export_path,
+                        compression=compression,
+                        partition_cols=partition_cols,
+                    )
+
+                    st.success(f"Parquet exported to {export_path}")
+                except Exception as e:
+                    st.error(f"Export failed: {str(e)}")
+
 
 else:
     st.info("Please upload a PDF file to get started.")

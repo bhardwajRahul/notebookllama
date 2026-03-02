@@ -139,6 +139,52 @@ class OtelTracesSqlEngine:
             self._connect()
         return pd.read_sql_table(table_name=self.table_name, con=self._connection)
 
+    def to_parquet(
+        self,
+        output_path: str,
+        compression: Literal["snappy", "gzip", "brotli", "lz4", "zstd"] = "snappy",
+        partition_cols: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Export traces to Parquet format for efficient storage and querying.
+
+        Args:
+            output_path: Path to save parquet file/directory
+            compression: Compression algorithm (default: snappy)
+            partition_cols: Columns to partition by (e.g., ['service_name', 'date'])
+        """
+        try:
+            df = self.to_pandas()
+        except ValueError:
+            df = pd.DataFrame()
+
+        # Ensure start_time is datetime for better downstream usability
+        if "start_time" in df.columns:
+            df["start_time"] = pd.to_datetime(df["start_time"], unit="us")
+
+        # Handle partition columns
+        if partition_cols:
+            # Derive date column only if explicitly requested
+            if "date" in partition_cols:
+                if "start_time" not in df.columns:
+                    raise ValueError("Cannot derive 'date' column without 'start_time'")
+                df["date"] = df["start_time"].dt.date
+
+            # Validate partition columns
+            missing_cols = [col for col in partition_cols if col not in df.columns]
+            if missing_cols:
+                raise ValueError(
+                    f"Invalid partition columns: {missing_cols}. "
+                    f"Available columns: {list(df.columns)}"
+                )
+
+        df.to_parquet(
+            output_path,
+            compression=compression,
+            partition_cols=partition_cols,
+            index=False,
+        )
+
     def disconnect(self) -> None:
         if not self._connection:
             raise ValueError("Engine was never connected!")
